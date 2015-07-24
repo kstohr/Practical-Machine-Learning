@@ -1,0 +1,258 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Kate Stohr"
+date: "July 14, 2015"
+output: html_document
+---
+```{r echo=FALSE}
+options(digits=4, scipen=10)
+```
+##Summary##  
+
+This project analyses data from fitness devices (Jawbone, Fitbit, etc.) to predict the manner in which participants are performing a specific movement. Six participants wore accelerometers on the belt, forearm, arm, and dumbbell. Rather than tracking frequency, the data attempts to tracking how well participants performed the activity. 
+
+The goal of this project is to accurately predict whether or not the participant performed the activity correctly or incorrectly (the "class" variable) to allow real-time feedback to exercisers wearing training devices.
+
+For this project, the training data was split into a training and a test set. I cleaned and preprocessed the data. After performing some exploratory analysis, I subset the data and removed unnecessary variables. I then fit the relevant subset of the data using trees, random forests, and linear discrimination analysis. The random forests model resulted in the best fit. 
+
+##Data Source##
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. [Qualitative Activity Recognition of Weight Lifting Exercises] (http://groupware.les.inf.puc-rio.br/har).  Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013. 
+
+##Data Processing##
+
+Participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different manners ("classe"). Class "A" corresponds to correct execution of the exercise, while the other 4 classes correspond to common mistakes. According to the [researchers](http://groupware.les.inf.puc-rio.br/har#ixzz3gTHdOp00), the sensors monitor the movements at a rate of 45Hz, and the data is separated into timed "windows." 
+
+The data appears to be summarized by time series windows, including (min, max, mean, sd, var, avg). Due to the structure of the dataset, these variables contain a high proportion of NA's. Because we're trying to predict the type of movement against a randomly drawn sample of observations (rather than a set sampled based on time windows), these summary variables are removed to avoid noise in the model. (See Appendix, "Exploratory Analysis")
+
+###Load libraries###
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+packages <- c("ggplot2", "caret", "data.table", "randomForest", "stats", "scales", "gridExtra")
+sapply(packages, require, character.only = TRUE, quietly = TRUE, warn = FALSE)
+```
+
+###Load Data### 
+```{r cache=TRUE}
+
+setwd("~/Documents/Coursera/Practical Machine Learning/project") ## sets working directory
+
+url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv" ## download training data
+f <<- file.path(getwd(), "/data/pml-training.csv")
+download.file(url, f, method = "curl", quiet=TRUE)
+
+url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv" ## download testing data
+f <<- file.path(getwd(), "/data/pml-testing.csv")
+download.file(url, f, method = "curl", quiet=TRUE)
+```
+
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+## Read data, replace blank, NA, or excel errors with "NA", strip any extra white space that might cause variables to misclassified. 
+ptrain<-read.csv("data/pml-training.csv", sep=",", dec=".",  na.strings=c("#DIV/0!", "", "NA"), strip.white=T)
+ptest<-read.csv("data/pml-testing.csv", sep=",", dec=".", na.strings=c("#DIV/0!", "", "NA"), strip.white=T)
+````
+
+###Process Data### 
+1. Ensure variables are classed correctly. Remove any variables that only contain NAs. 
+
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+class_type<-sapply(ptrain, class)
+table(class_type) ## R interprets variables with all NAs as "logical"
+log<-names(class_type[class_type=="logical"]) ##isolate "logical" variables 
+if (sum(!is.na(ptrain[log])) == 0) {  ## If variable only contains NAs then remove
+        ptrain<-ptrain[ , -which(names(ptrain) %in% log)] #apply to training data
+        ptest<-ptest[ , -which(names(ptest) %in% log)] #apply to validation data
+}
+names(class_type[class_type=="factor"]) ## check factor columns classed correctly. 
+```
+
+2. Remove non-numeric, bookkeeping variables that are unrelated to the data we're trying to predict.  
+
+```{r}
+# Remove unrelated variables 
+ptrain<-subset(ptrain, select=-c(X,user_name,cvtd_timestamp,new_window,num_window,raw_timestamp_part_1, raw_timestamp_part_2)) ##apply to training set 
+ptest<-subset(ptest, select=-c(X,user_name,cvtd_timestamp,new_window,num_window,raw_timestamp_part_1, raw_timestamp_part_2)) ##apply to validation set
+
+```
+
+3. Missing values can interfere with machine learning. Remove variables with greater than 20% missing values are removed. Note: This will remove the summary variables (avg, min, max, sd, var, etc.) associated with the time series windows which contain mostly NAs. 
+
+```{r}
+##remove variables with more than 20% NAs 
+thresh<-.20 *dim(ptrain)[1] ## sets a threshold of 25%
+delete<-NULL ## creates a empty placholder variable
+for (i in 1:dim(ptrain)[2]){
+        if (sum(is.na(ptrain[,i])) > thresh) delete<-c(delete,i)
+            }
+ptrain<-ptrain[,-delete] ##apply to training set
+ptest<-ptest[,-delete] ##apply to validation set
+```
+
+After cleaning the data and removing variables with a high proportion of NA's, there are now `r dim(ptrain)[2]` predictors remaining which will be used to train the model. 
+
+##Data Analysis##
+
+###Partition Data###
+The original pml-training set is partitioned into two randomly sampled datasets: training (60%) and testing (40%). This testing set will be used to estimate the out-of-sample error rate to understand how well the model will apply to the validation set, the pml-testing data (ptest).
+
+```{r}
+set.seed(222) #sets the seed
+
+## create training and testing set
+inTrain<-createDataPartition(ptrain$classe,p=0.6,list=FALSE) ##training set to 60% for medium sized data sets. 
+training<-ptrain[inTrain,]
+testing<-ptrain[-inTrain,]
+``` 
+
+###Model Selection###
+
+The goal is to correctly predict the class of movement based on the data. Therefore a classification model is required. Some options include: Trees, Random Forests, and Linear Discriminant Analysis. See other options [here](http://topepo.github.io/caret/modelList.html). I use 4-fold cross validation to limit bias, with parallel processing to save computational time. 
+
+```{r cache=TRUE, message=FALSE, warning=FALSE}
+
+ctrl <- trainControl(allowParallel=T, method="cv", number=4) ## do 4-fold cross validation with parallel processing
+model1 <- train(classe ~ ., data=training, trControl=ctrl, method="rpart") ## fit model with trees
+model2 <- train(classe ~ ., data=training, trControl=ctrl, method="rf") ## fit model with random forests
+model3 <- train(classe ~ ., data=training, trControl=ctrl, method="lda") ## fit model with Linear Discriminant Analysis
+```
+
+```{r}
+## compare the model accuracy using the resample function
+resamps <- resamples(list(Trees = model1, Random_Forest = model2, Linear_Discrimination_Analysis = model3))
+summary(resamps)$statistics$Accuracy
+## plot the relative accuracy of the models
+trellis.par.set(caretTheme())
+dotplot(resamps, metric = "Accuracy")
+```
+
+With median `r percent(summary(resamps)$statistics$Accuracy[2,4])` accuracy, Random Forests performs best of the three models. Next, I use the predict function on the test data (testing) to estimate the out of sample error rate. 
+
+```{r}
+prediction <- predict(model2, newdata=testing)
+acc_test<-sum(prediction == testing$classe) / length(prediction)
+confusionMatrix(testing$classe, prediction)$table
+confusionMatrix(testing$classe, prediction)$overall
+```
+
+The estimate of the out-of-sample accuracy using the Random Forest model is `r percent(acc_test)`. 
+
+###Model Tuning### 
+
+To tune the model it is possible to reduce the number of features included by identifying those variables that are most important in the model and the best cut-off for the number of trees to include. Based on plots of the model, I include only the top 27 features and set the cut-off for the number of trees at 100. (See Appendix, "Model Tuning" for model plots, optimal cut-off points and computational comparison).
+
+```{r}
+##reduce the data set to include only the most significant variables in the model. 
+imp_var<-varImp(model2) ## isolate most significant variables.
+imp_var_names<-rownames(imp_var$importance)[1:27] #store top 27 in a variable 
+training_tuned<-cbind(training[imp_var_names], training$classe)#subset the training data
+names(training_tuned)<-c(imp_var_names, "classe") #rename the variables to match original dataset 
+```
+
+```{r}
+## refit the model with the tuned feature set and the number of trees set to 100 
+model2_tuned <- train(classe ~ ., data=training_tuned, trControl=ctrl, method="rf", ntree=100) ## refit model 
+model2_tuned$results
+```
+
+```{r}
+##apply the tuning conditions to the testing data
+testing_tuned<-cbind(testing[imp_var_names], testing$classe)#subset the training data
+names(testing_tuned)<-c(imp_var_names, "classe") #rename the variables to match original dataset 
+```
+
+```{r}
+## predict on the testing data set with the tuned model and data  
+prediction_tuned <- predict(model2_tuned, newdata=testing_tuned) ## results with testing data set
+acc_test<-sum(prediction_tuned == testing_tuned$classe) / length(prediction_tuned)
+confusionMatrix(testing_tuned$classe, prediction_tuned)$table
+confusionMatrix(testing_tuned$classe, prediction_tuned)$overall
+```
+
+The tuned model has an estimated out-of sample accuracy of `r percent(confusionMatrix(testing_tuned$classe, prediction_tuned)$overall[[1]])`, but runs much more quickly. 
+
+###Model Validation###
+
+```{r}
+##apply the tuning conditions to the validation data
+ptest_tuned<-cbind(ptest[imp_var_names], ptest$problem_id)#subset the training data
+names(ptest_tuned)<-c(imp_var_names, "problem_id") #rename the variables to match original dataset 
+
+##predict using the validation set
+prediction <- predict(model2, newdata=ptest)
+prediction_tuned <- predict(model2_tuned, newdata=ptest_tuned)
+
+```
+
+```{r}
+#double check to see if the results are the same for the model before and after it has been tuned. 
+prediction
+prediction_tuned
+identical(prediction, prediction_tuned) 
+```
+
+Despite the slightly lower accuracy score, the results of the tuned Random Forests model are the same as the results of the original Random Forests model. 
+
+##Assumptions##  
+It should be noted that only six subjects participated in the original study and so the sample size of the data set is quite small. If data from more participants was added to the data set, the model would likely be "over-fitted." This limits the  model's accuracy. 
+
+##Conclusion##  
+Based on the data provided, fitting a model using Random Forest with 4-fold cross validation results in `r percent(acc_test)` estimate of accuracy with 95% confidence level. Tuning the model reduces the accuracy slightly, but does not result in a different outcome when applied to the validation data. Given a larger dataset, the initial model might be sligtly more accurate, but the tuned model would run significantly faster without significant loss in accuracy.
+
+#Appendix#
+
+##Exploratory Analysis## 
+
+1. Except for type A, which is much more frequent, the other classe types seem to have roughly the same count. 
+
+```{r eval=FALSE}
+barplot(table(ptrain$class))
+```
+
+2. Because the data is summarized by time windows, many of the rows contain a high proportion of NA's (>1900). Removing summary variables will allow for more accurate prediction as the data we're trying to predict is also randomly sampled. Note: In practice, it might be better to sample the data based on time windows [as proposed by the researchers](http://groupware.les.inf.puc-rio.br/har#ixzz3gTDNubXe) to limit the size of the dataset and reduce computational time. However, for this assignment we're trying to predict data that is not organized by time window, so the summary variables should be removed. 
+
+```{r eval=FALSE}
+nas<-apply(ptrain, 2, is.na)
+sum_nas<-apply(nas, 2, sum)
+levels(factor(sum_nas))
+```
+
+3. The different types of movement seem to be differentiated, but with so many variables it's hard to determine what is driving the pattern just from the plots. 
+
+```{r message=FALSE, warning=FALSE, eval=FALSE, fig.width=8}
+b<-qplot(roll_belt, roll_arm, data=ptrain, color=classe)
+a<-qplot(roll_belt, pitch_forearm, data=ptrain, color=classe)
+c<-qplot(roll_belt, total_accel_belt, data=ptrain, color=classe)
+grid.arrange(a,b,c, ncol=3)
+```
+
+##Model Tuning##  
+
+*Plot1*  
+The optimal number of predictors is `r model2$results[2,1]`. 
+
+```{r message=FALSE, warning=FALSE}
+plot(model2, main="Model 2 Random Forests (best fit): Accuracy by Number of Selected Predictors")
+```
+
+*Plot 2*  
+The error rate reduces dramatically at about 100 trees. Further computation does not addd significantly to the accuracy. 
+
+```{r message=FALSE, warning=FALSE}
+plot(model2$finalModel, uniform=TRUE, main="Model 2 Random Forests (best fit): Error by Number of Trees")
+```
+  
+*Plot3*  
+The most 'important' variables are: 
+
+```{r message=FALSE, warning=FALSE}
+plot(varImp(model2), main="Model 2 Random Forests (best fit): Variables by Importance")
+```
+
+*Computational Time*
+
+```{r}
+model2$times[[1]] #computational time for the untuned Randam Forests Model
+model2_tuned$times[[1]] #computationaltime for the tuned Randam Forests Model
+
+compare<-model2$times[[1]][[3]]/model2_tuned$times[[1]][[3]] 
+```
+
+The tuned model runs `r compare` times as fast and reduces computational time significantly without losing much in terms of accuracy. 
