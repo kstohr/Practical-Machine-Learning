@@ -228,7 +228,7 @@ grid.arrange(a,b,c, ncol=3)
 *Plot1*  
 The optimal number of predictors is `r model2$results[2,1]`. 
 
-```{r message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE, fig.width=8}
 plot(model2, main="Model 2 Random Forests (best fit): Accuracy by Number of Selected Predictors")
 ```
 
