@@ -9,11 +9,11 @@ options(digits=4, scipen=10)
 ```
 ##Summary##  
 
-This project analizes data from fitness devices (Jawbone, Fitbit, etc.) to predict the manner in which participants are performing a specific movement. Six participants wore accelerometers on the belt, forearm, arm, and dumbbell. Rather than tracking frequency, the data attempts to tracking how well participants performed the activity. 
+This project analyzes data from fitness devices (Jawbone, Fitbit, etc.) to predict the manner in which participants are performing a specific movement. Six participants wore accelerometers on the belt, forearm, arm, and dumbbell. Rather than tracking frequency, the data attempts to tracking how well participants performed the activity. 
 
 The goal of this project is to accurately predict whether or not the participant performed the activity correctly or incorrectly (the "class" variable) to allow real-time feedback to exercisers wearing training devices.
 
-For this project, the training data was split into a training and a test set. I cleaned and preprocessed the data. After performing some exploratory analysis, I subset the data and removed unnecessary variables. I then fit the relevant subset of the data using trees, random forests, and linear discrimination analysis. The random forests model resulted in the best fit. 
+For this project, the training data was split into a training and a test set. I cleaned and pre-processed the data. After performing some exploratory analysis, I subset the data and removed unnecessary variables. I then fit the relevant subset of the data using trees, random forests, and linear discrimination analysis. The random forests model resulted in the best fit. 
 
 ##Data Source##
 Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. [Qualitative Activity Recognition of Weight Lifting Exercises](http://groupware.les.inf.puc-rio.br/har).  Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013. 
@@ -22,7 +22,7 @@ Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. [Qualitative Acti
 
 Participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different manners ("classe"). Class "A" corresponds to correct execution of the exercise, while the other 4 classes correspond to common mistakes. According to the [researchers](http://groupware.les.inf.puc-rio.br/har#ixzz3gTHdOp00), the sensors monitor the movements at a rate of 45Hz, and the data is separated into timed "windows." 
 
-The data appears to be summarized by time series windows, including (min, max, mean, sd, var, avg). Due to the structure of the dataset, these variables contain a high proportion of NA's. Because we're trying to predict the type of movement against a randomly drawn sample of observations (rather than a set sampled based on time windows), these summary variables are removed to avoid noise in the model. (See Appendix, "Exploratory Analysis")
+The data appears to be summarized by time series windows, including (min, max, mean, sd, var, avg). Due to the structure of the data set, these variables contain a high proportion of Na's. Because we're trying to predict the type of movement against a randomly drawn sample of observations (rather than a set sampled based on time windows), these summary variables are removed to avoid noise in the model. (See Appendix, "Exploratory Analysis")
 
 ###Load libraries###
 ```{r echo=FALSE, message=FALSE, warning=FALSE}
@@ -51,7 +51,7 @@ ptest<-read.csv("data/pml-testing.csv", sep=",", dec=".", na.strings=c("#DIV/0!"
 ````
 
 ###Process Data### 
-1. Ensure variables are classed correctly. Remove any variables that only contain NAs. 
+1. Ensure variables are classed correctly. Remove any variables that only contain As. 
 
 ```{r cache=TRUE, message=FALSE, warning=FALSE}
 class_type<-sapply(ptrain, class)
@@ -73,7 +73,7 @@ ptest<-subset(ptest, select=-c(X,user_name,cvtd_timestamp,new_window,num_window,
 
 ```
 
-3. Missing values can interfere with machine learning. Remove variables with greater than 20% missing values are removed. Note: This will remove the summary variables (avg, min, max, sd, var, etc.) associated with the time series windows which contain mostly NAs. 
+3. Missing values can interfere with machine learning. Remove variables with greater than 20% missing values are removed. Note: This will remove the summary variables (avg, min, max, sd, var, etc.) associated with the time series windows which contain mostly Na's. 
 
 ```{r}
 ##remove variables with more than 20% NAs 
@@ -86,12 +86,12 @@ ptrain<-ptrain[,-delete] ##apply to training set
 ptest<-ptest[,-delete] ##apply to validation set
 ```
 
-After cleaning the data and removing variables with a high proportion of NA's, there are now `r dim(ptrain)[2]` predictors remaining which will be used to train the model. 
+After cleaning the data and removing variables with a high proportion of Na's, there are now `r dim(ptrain)[2]` predictors remaining which will be used to train the model. 
 
 ##Data Analysis##
 
 ###Partition Data###
-The original pml-training set is partitioned into two randomly sampled datasets: training (60%) and testing (40%). This testing set will be used to estimate the out-of-sample error rate to understand how well the model will apply to the validation set, the pml-testing data (ptest).
+The original pml-training set is partitioned into two randomly sampled data sets: training (60%) and testing (40%). This testing set will be used to estimate the out-of-sample error rate to understand how well the model will apply to the validation set, the pml-testing data (ptest).
 
 ```{r}
 set.seed(222) #sets the seed
@@ -194,19 +194,19 @@ Despite the slightly lower accuracy score, the results of the tuned Random Fores
 It should be noted that only six subjects participated in the original study and so the sample size of the data set is quite small. If data from more participants was added to the data set, the model would likely be "over-fitted." This limits the  model's accuracy. 
 
 ##Conclusion##  
-Based on the data provided, fitting a model using Random Forest with 4-fold cross validation results in `r percent(acc_test)` estimate of accuracy with 95% confidence level. Tuning the model reduces the accuracy slightly, but does not result in a different outcome when applied to the validation data. Given a larger dataset, the initial model might be sligtly more accurate, but the tuned model would run significantly faster without significant loss in accuracy.
+Based on the data provided, fitting a model using Random Forest with 4-fold cross validation results in `r percent(acc_test)` estimate of accuracy with 95% confidence level. Tuning the model reduces the accuracy slightly, but does not result in a different outcome when applied to the validation data. Given a larger data set, the initial model might be slightly more accurate, but the tuned model would run significantly faster without significant loss in accuracy.
 
 #Appendix#
 
 ##Exploratory Analysis## 
 
-1. Except for type A, which is much more frequent, the other classe types seem to have roughly the same count. 
+1. Except for type A, which is much more frequent, the other class types seem to have roughly the same count. 
 
 ```{r eval=FALSE}
 barplot(table(ptrain$class))
 ```
 
-2. Because the data is summarized by time windows, many of the rows contain a high proportion of NA's (>1900). Removing summary variables will allow for more accurate prediction as the data we're trying to predict is also randomly sampled. Note: In practice, it might be better to sample the data based on time windows [as proposed by the researchers](http://groupware.les.inf.puc-rio.br/har#ixzz3gTDNubXe) to limit the size of the dataset and reduce computational time. However, for this assignment we're trying to predict data that is not organized by time window, so the summary variables should be removed. 
+2. Because the data is summarized by time windows, many of the rows contain a high proportion of Na's (>1900). Removing summary variables will allow for more accurate prediction as the data we're trying to predict is also randomly sampled. Note: In practice, it might be better to sample the data based on time windows [as proposed by the researchers](http://groupware.les.inf.puc-rio.br/har#ixzz3gTDNubXe) to limit the size of the data set and reduce computational time. However, for this assignment we're trying to predict data that is not organized by time window, so the summary variables should be removed. 
 
 ```{r eval=FALSE}
 nas<-apply(ptrain, 2, is.na)
@@ -233,7 +233,7 @@ plot(model2, main="Model 2 Random Forests (best fit): Accuracy by Number of Sele
 ```
 
 *Plot 2*  
-The error rate reduces dramatically at about 100 trees. Further computation does not addd significantly to the accuracy. 
+The error rate reduces dramatically at about 100 trees. Further computation does not add significantly to the accuracy. 
 
 ```{r message=FALSE, warning=FALSE}
 plot(model2$finalModel, uniform=TRUE, main="Model 2 Random Forests (best fit): Error by Number of Trees")
