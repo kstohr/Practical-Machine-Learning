@@ -70,13 +70,13 @@ img {
 
 <div id="summary" class="section level2">
 <h2>Summary</h2>
-<p>This project analyses data from fitness devices (Jawbone, Fitbit, etc.) to predict the manner in which participants are performing a specific movement. Six participants wore accelerometers on the belt, forearm, arm, and dumbbell. Rather than tracking frequency, the data attempts to tracking how well participants performed the activity.</p>
+<p>This project analizes data from fitness devices (Jawbone, Fitbit, etc.) to predict the manner in which participants are performing a specific movement. Six participants wore accelerometers on the belt, forearm, arm, and dumbbell. Rather than tracking frequency, the data attempts to tracking how well participants performed the activity.</p>
 <p>The goal of this project is to accurately predict whether or not the participant performed the activity correctly or incorrectly (the “class” variable) to allow real-time feedback to exercisers wearing training devices.</p>
 <p>For this project, the training data was split into a training and a test set. I cleaned and preprocessed the data. After performing some exploratory analysis, I subset the data and removed unnecessary variables. I then fit the relevant subset of the data using trees, random forests, and linear discrimination analysis. The random forests model resulted in the best fit.</p>
 </div>
 <div id="data-source" class="section level2">
 <h2>Data Source</h2>
-<p>Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. [Qualitative Activity Recognition of Weight Lifting Exercises] (<a href="http://groupware.les.inf.puc-rio.br/har" class="uri">http://groupware.les.inf.puc-rio.br/har</a>). Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human ’13) . Stuttgart, Germany: ACM SIGCHI, 2013.</p>
+<p>Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. <a href="http://groupware.les.inf.puc-rio.br/har">Qualitative Activity Recognition of Weight Lifting Exercises</a>. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human ’13) . Stuttgart, Germany: ACM SIGCHI, 2013.</p>
 </div>
 <div id="data-processing" class="section level2">
 <h2>Data Processing</h2>
@@ -297,9 +297,9 @@ grid.arrange(a,b,c, ncol=3)</code></pre>
 ## 380.632   3.895 386.790</code></pre>
 <pre class="r"><code>model2_tuned$times[[1]] #computationaltime for the tuned Randam Forests Model</code></pre>
 <pre><code>##    user  system elapsed 
-##  43.315   0.807  44.421</code></pre>
+##   42.93    0.68   43.82</code></pre>
 <pre class="r"><code>compare&lt;-model2$times[[1]][[3]]/model2_tuned$times[[1]][[3]] </code></pre>
-<p>The tuned model runs 8.7074 times as fast and reduces computational time significantly without losing much in terms of accuracy.</p>
+<p>The tuned model runs 8.8262 times as fast and reduces computational time significantly without losing much in terms of accuracy.</p>
 </div>
 </div>
 
